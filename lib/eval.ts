@@ -6,11 +6,11 @@ import type { EvaluationPayload } from './types';
 export async function sendEvaluationWithRetry(
   evaluationUrl: string,
   payload: EvaluationPayload,
-  timeoutMinutes: number = 10
+  timeoutMinutes: number = 0.33 // 20 seconds total timeout
 ): Promise<boolean> {
   const deadline = new Date(Date.now() + timeoutMinutes * 60 * 1000);
   let retryDelay = 1000; // Start with 1 second
-  const maxRetryDelay = 60000; // Cap at 60 seconds
+  const maxRetryDelay = 5000; // Cap at 5 seconds
 
   while (Date.now() < deadline.getTime()) {
     try {
