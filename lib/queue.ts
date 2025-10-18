@@ -7,4 +7,4 @@
  * Note: Long-running tasks may hit serverless timeout limits.
  */
 
-export { addTaskToQueue, getQueueHealth } from './queue-memory';
+export { addTaskToQueue, getQueueHealth, getTaskStatus } from './queue-memory';

@@ -40,12 +40,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Add task to background processing queue
-    await addTaskToQueue({ request: taskRequest });
+    const job = await addTaskToQueue({ request: taskRequest });
 
-    // Return immediate response
+    // Return immediate response with taskId for status polling
     return NextResponse.json(
       {
         status: 'processing',
+        taskId: job.id,
         task: taskRequest.task,
         round: taskRequest.round,
         message: `Task '${taskRequest.task}' (Round ${taskRequest.round}) accepted and processing in background`,

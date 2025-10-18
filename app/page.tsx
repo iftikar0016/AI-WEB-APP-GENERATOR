@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 interface HealthStatus {
   status: string;
@@ -10,6 +10,18 @@ interface HealthStatus {
     completed: number;
     failed: number;
   };
+}
+
+interface TaskStatus {
+  taskId: string;
+  status: 'waiting' | 'active' | 'completed' | 'failed';
+  stage: string;
+  progress: number;
+  message?: string;
+  githubUrl?: string;
+  pagesUrl?: string;
+  commitSha?: string;
+  error?: string;
 }
 
 export default function Home() {
@@ -23,10 +35,13 @@ export default function Home() {
     round: 1,
     brief: '',
     nonce: '',
-    evaluation_url: '',
   });
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null);
+  const [polling, setPolling] = useState(false);
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const pollingAttempts = useRef(0);
+  const maxPollingAttempts = 60; // 60 attempts * 2 seconds = 2 minutes max
 
   const fetchHealth = () => {
     setLoading(true);
@@ -47,10 +62,73 @@ export default function Home() {
     // No auto-refresh to save Vercel costs
   }, []);
 
+  // Poll task status
+  const pollTaskStatus = async (taskId: string) => {
+    pollingAttempts.current += 1;
+
+    // Stop polling after max attempts (2 minutes)
+    if (pollingAttempts.current > maxPollingAttempts) {
+      console.error('Max polling attempts reached, stopping');
+      setPolling(false);
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+      }
+      setTaskStatus({
+        taskId,
+        status: 'failed',
+        stage: 'failed',
+        progress: 0,
+        error: 'Timeout: Could not retrieve task status',
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/task-status?taskId=${encodeURIComponent(taskId)}`);
+      if (response.ok) {
+        const status: TaskStatus = await response.json();
+        setTaskStatus(status);
+
+        // Stop polling if completed or failed
+        if (status.status === 'completed' || status.status === 'failed') {
+          setPolling(false);
+          if (pollingInterval.current) {
+            clearInterval(pollingInterval.current);
+            pollingInterval.current = null;
+          }
+          fetchHealth(); // Refresh health status
+        }
+      } else if (response.status === 404) {
+        // Task not found - might be in different queue instance, keep polling for a bit
+        console.warn('Task not found yet, continuing to poll...');
+      } else {
+        // Other error - stop polling
+        console.error('Error polling task status:', response.status);
+        setPolling(false);
+        if (pollingInterval.current) {
+          clearInterval(pollingInterval.current);
+          pollingInterval.current = null;
+        }
+      }
+    } catch (error) {
+      console.error('Error polling task status:', error);
+    }
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+      }
+    };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setResult(null);
+    setTaskStatus(null);
 
     try {
       const response = await fetch('/api/api-endpoint', {
@@ -65,7 +143,6 @@ export default function Home() {
           round: formData.round,
           brief: formData.brief,
           nonce: formData.nonce,
-          evaluation_url: formData.evaluation_url,
           checks: [],
           attachments: [],
         }),
@@ -73,8 +150,27 @@ export default function Home() {
 
       const data = await response.json();
 
-      if (response.ok) {
-        setResult({ success: true, message: 'Task submitted successfully! Check the queue status.' });
+      if (response.ok && data.taskId) {
+        // Start polling for task status
+        pollingAttempts.current = 0; // Reset counter
+        setPolling(true);
+        setTaskStatus({
+          taskId: data.taskId,
+          status: 'waiting',
+          stage: 'queued',
+          progress: 0,
+          message: 'Task queued for processing',
+        });
+
+        // Poll every 2 seconds
+        pollingInterval.current = setInterval(() => {
+          pollTaskStatus(data.taskId);
+        }, 2000);
+
+        // Also poll immediately
+        pollTaskStatus(data.taskId);
+
+        // Clear form
         setFormData({
           secret: '',
           email: '',
@@ -82,20 +178,36 @@ export default function Home() {
           round: 1,
           brief: '',
           nonce: '',
-          evaluation_url: '',
         });
-        setTimeout(() => {
-          setIsModalOpen(false);
-          setResult(null);
-          fetchHealth();
-        }, 2000);
       } else {
-        setResult({ success: false, message: data.error || 'Failed to submit task' });
+        setTaskStatus({
+          taskId: '',
+          status: 'failed',
+          stage: 'failed',
+          progress: 0,
+          error: data.error || 'Failed to submit task',
+        });
       }
     } catch (error) {
-      setResult({ success: false, message: 'Network error. Please try again.' });
+      setTaskStatus({
+        taskId: '',
+        status: 'failed',
+        stage: 'failed',
+        progress: 0,
+        error: 'Network error. Please try again.',
+      });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setTaskStatus(null);
+    setPolling(false);
+    if (pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+      pollingInterval.current = null;
     }
   };
 
@@ -227,18 +339,94 @@ export default function Home() {
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-white">Create New Web App</h2>
                 <button
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setResult(null);
-                  }}
+                  onClick={closeModal}
                   className="text-white hover:text-gray-200 text-3xl font-bold"
+                  disabled={polling}
                 >
                   ×
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            {/* Progress Display */}
+            {taskStatus && (
+              <div className="p-6 border-b border-gray-200 bg-gray-50">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">
+                      {taskStatus.status === 'completed' ? '✅ Completed' :
+                       taskStatus.status === 'failed' ? '❌ Failed' :
+                       taskStatus.status === 'active' ? '⚙️ Processing' :
+                       '⏳ Waiting'}
+                    </span>
+                    <span className="text-sm text-gray-600">{taskStatus.progress}%</span>
+                  </div>
+                  
+                  {/* Progress Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div
+                      className={`h-3 rounded-full transition-all duration-500 ${
+                        taskStatus.status === 'completed' ? 'bg-green-500' :
+                        taskStatus.status === 'failed' ? 'bg-red-500' :
+                        'bg-indigo-600'
+                      }`}
+                      style={{ width: `${taskStatus.progress}%` }}
+                    />
+                  </div>
+
+                  {/* Status Message */}
+                  <p className="text-sm text-gray-700">
+                    {taskStatus.message || 'Processing...'}
+                  </p>
+
+                  {/* Success Details */}
+                  {taskStatus.status === 'completed' && taskStatus.pagesUrl && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+                      <p className="text-green-800 font-semibold">🎉 Your app is ready!</p>
+                      {taskStatus.githubUrl && (
+                        <a
+                          href={taskStatus.githubUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-sm text-blue-600 hover:underline"
+                        >
+                          📦 GitHub Repository →
+                        </a>
+                      )}
+                      <a
+                        href={taskStatus.pagesUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-sm text-blue-600 hover:underline font-medium"
+                      >
+                        🚀 View Live App →
+                      </a>
+                      <button
+                        onClick={closeModal}
+                        className="mt-2 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg transition-all"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Error Details */}
+                  {taskStatus.status === 'failed' && taskStatus.error && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-red-800 text-sm">{taskStatus.error}</p>
+                      <button
+                        onClick={closeModal}
+                        className="mt-2 w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg transition-all"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-5" style={{ display: taskStatus?.status === 'completed' || taskStatus?.status === 'failed' ? 'none' : 'block' }}>
               <div className="grid md:grid-cols-2 gap-5">
                 <div>
                   <label htmlFor="secret" className="block text-sm font-medium text-gray-700 mb-2">
@@ -324,24 +512,6 @@ export default function Home() {
               </div>
 
               <div>
-                <label htmlFor="evaluation_url" className="block text-sm font-medium text-gray-700 mb-2">
-                  Evaluation Callback URL <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="evaluation_url"
-                  type="url"
-                  value={formData.evaluation_url}
-                  onChange={(e) => setFormData({ ...formData, evaluation_url: e.target.value })}
-                  placeholder="https://your-app.com/webhook"
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  URL to receive the generation results and GitHub Pages link
-                </p>
-              </div>
-
-              <div>
                 <label htmlFor="nonce" className="block text-sm font-medium text-gray-700 mb-2">
                   Nonce <span className="text-red-500">*</span>
                 </label>
@@ -359,24 +529,12 @@ export default function Home() {
                 </p>
               </div>
 
-              {result && (
-                <div
-                  className={`p-4 rounded-lg ${
-                    result.success
-                      ? 'bg-green-50 border border-green-200 text-green-800'
-                      : 'bg-red-50 border border-red-200 text-red-800'
-                  }`}
-                >
-                  <p className="font-medium">{result.message}</p>
-                </div>
-              )}
-
               <div className="flex gap-4 pt-4">
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || polling}
                   className={`flex-1 bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-all ${
-                    submitting
+                    submitting || polling
                       ? 'opacity-50 cursor-not-allowed'
                       : 'hover:bg-indigo-700 transform hover:scale-105'
                   }`}
@@ -395,11 +553,9 @@ export default function Home() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setResult(null);
-                  }}
-                  className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 font-semibold hover:bg-gray-50 transition-all"
+                  onClick={closeModal}
+                  disabled={polling}
+                  className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 font-semibold hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>

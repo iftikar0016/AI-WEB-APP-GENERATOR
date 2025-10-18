@@ -14,7 +14,7 @@ export const TaskRequestSchema = z.object({
   nonce: z.string(),
   brief: z.string(),
   checks: z.array(z.string()).optional().default([]),
-  evaluation_url: z.string().url(),
+  evaluation_url: z.string().url().optional(), // Optional now - can use polling instead
   attachments: z.array(AttachmentSchema).optional(),
 });
 
@@ -59,4 +59,31 @@ export interface Settings {
   GITHUB_USERNAME: string;
   AIPIPE_TOKEN: string;
   OPENAI_BASE_URL: string;
+}
+
+// Task status tracking
+export type TaskStage = 
+  | 'queued'
+  | 'generating-html'
+  | 'creating-repo'
+  | 'committing-files'
+  | 'enabling-pages'
+  | 'fetching-repo'
+  | 'updating-files'
+  | 'sending-evaluation'
+  | 'completed'
+  | 'failed';
+
+export interface TaskStatus {
+  taskId: string;
+  status: 'waiting' | 'active' | 'completed' | 'failed';
+  stage: TaskStage;
+  progress: number; // 0-100
+  message?: string;
+  githubUrl?: string;
+  pagesUrl?: string;
+  commitSha?: string;
+  error?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
