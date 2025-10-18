@@ -168,5 +168,5 @@ export function getTaskStatus(taskId: string) {
 if (!global.__inMemoryQueue) {
   console.log('⚠️  Using IN-MEMORY queue (development mode)');
   console.log('⚠️  Jobs will be lost on server restart');
-  console.log('⚠️  For production, use Redis + BullMQ (see lib/queue-redis.ts)');
+  console.log('⚠️  For production, use Redis + BullMQ');
 }
