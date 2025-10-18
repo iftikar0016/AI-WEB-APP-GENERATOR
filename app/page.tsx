@@ -29,6 +29,7 @@ export default function Home() {
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const fetchHealth = () => {
+    setLoading(true);
     fetch('/api/health')
       .then((res) => res.json())
       .then((data) => {
@@ -43,8 +44,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 5000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
+    // No auto-refresh to save Vercel costs
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -121,9 +121,18 @@ export default function Home() {
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">
-              Queue Status
-            </h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-800">
+                Queue Status
+              </h2>
+              <button
+                onClick={fetchHealth}
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? '🔄 Refreshing...' : '🔄 Refresh'}
+              </button>
+            </div>
             {loading ? (
               <p className="text-gray-600">Loading...</p>
             ) : health ? (
