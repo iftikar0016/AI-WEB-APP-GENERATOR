@@ -1,13 +1,48 @@
-# Next.js Web App Generator API
+ # Next.js AI Web App Generator
 
-> AI-powered web application generation with automated GitHub Pages deployment
+ Generate AI-powered web applications with integrated GitHub repository creation, real-time progress updates, and instant GitHub Pages hosting.
 
-A production-ready Next.js application that generates fully functional single-file HTML web applications using AI, automatically commits them to GitHub repositories, and deploys them to GitHub Pages.
+ ## 🌟 Features
+ - AI-driven HTML/CSS/JavaScript app generation via OpenAI (AI Pipe)
+ - Automatic GitHub repository creation and commit
+ - Instant GitHub Pages deployment
+ - Real-time polling and progress UI
+ - Dark mode and responsive design with Tailwind CSS
+ - TypeScript & Zod validation for type-safe inputs
 
-## 🌟 Features
+ ## 🚀 Quick Start
+ ```bash
+ git clone https://github.com/iftikar0016/AI-WEB-APP-GENERATOR.git
+ cd AI-WEB-APP-GENERATOR
+ npm install
+ cp .env.example .env
+ # Fill in .env variables
+ npm run dev
+ ```
 
-- **AI-Powered Generation**: Uses OpenAI (via AI Pipe) to create complete HTML/CSS/JavaScript applications
-- **GitHub Integration**: Automatic repository creation, file commits, and GitHub Pages deployment
+ Open http://localhost:3000 in your browser.
+
+ ## 🔧 Scripts
+ | Command            | Description                  |
+ | ------------------ | ---------------------------- |
+ | npm run dev        | Start development server     |
+ | npm run build      | Build for production         |
+ | npm run start      | Start production server      |
+ | npm run lint       | Run ESLint                   |
+ | npm run type-check | TypeScript type checking     |
+ | npm test           | Run tests                    |
+
+ ## 🔑 Environment Variables
+ | Name            | Required | Description                          |
+ | --------------- | -------- | ------------------------------------ |
+ | MY_SECRET       | Yes      | API authentication secret            |
+ | GITHUB_TOKEN    | Yes      | GitHub Personal Access Token         |
+ | GITHUB_USERNAME | Yes      | Your GitHub username                 |
+ | AIPIPE_TOKEN    | Yes      | AI Pipe proxy token                  |
+ | OPENAI_BASE_URL | No       | AI Pipe endpoint (default used)      |
+
+ ## ⚖️ License
+ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 - **Round-based Updates**: Support for initial creation (Round 1) and iterative improvements (Round 2)
 - **Background Processing**: BullMQ-based job queue with Redis for reliable task processing
 - **Exponential Backoff Retry**: Robust evaluation callback delivery with configurable timeout
