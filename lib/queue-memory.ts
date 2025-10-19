@@ -142,15 +142,22 @@ class InMemoryQueue {
   }
 }
 
-// Singleton instance using global to prevent multiple instances in dev mode
-declare global {
-  var __inMemoryQueue: InMemoryQueue | undefined;
+const globalForQueue = globalThis as typeof globalThis & {
+  __inMemoryQueue?: InMemoryQueue;
+};
+
+const existingQueue = globalForQueue.__inMemoryQueue;
+
+if (!existingQueue) {
+  console.log('⚠️  Using IN-MEMORY queue (development mode)');
+  console.log('⚠️  Jobs will be lost on server restart');
+  console.log('⚠️  For production, use Redis + BullMQ');
 }
 
-const inMemoryQueue = global.__inMemoryQueue || new InMemoryQueue();
+const inMemoryQueue = existingQueue ?? new InMemoryQueue();
 
 if (process.env.NODE_ENV !== 'production') {
-  global.__inMemoryQueue = inMemoryQueue;
+  globalForQueue.__inMemoryQueue = inMemoryQueue;
 }
 
 export async function addTaskToQueue(jobData: ProcessTaskJobData) {
@@ -163,10 +170,4 @@ export async function getQueueHealth() {
 
 export function getTaskStatus(taskId: string) {
   return inMemoryQueue.getTaskStatus(taskId);
-}
-
-if (!global.__inMemoryQueue) {
-  console.log('⚠️  Using IN-MEMORY queue (development mode)');
-  console.log('⚠️  Jobs will be lost on server restart');
-  console.log('⚠️  For production, use Redis + BullMQ');
 }

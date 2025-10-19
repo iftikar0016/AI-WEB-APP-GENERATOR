@@ -1,4 +1,9 @@
 import { Octokit } from '@octokit/rest';
+import { RequestError } from '@octokit/request-error';
+
+function isRequestError(error: unknown): error is RequestError {
+  return error instanceof RequestError;
+}
 
 /**
  * Generate MIT License content
@@ -48,8 +53,8 @@ export async function createGitHubRepo(
     
     console.log(`✓ Repository created: ${data.html_url}`);
     return data;
-  } catch (error: any) {
-    if (error.status === 422) {
+  } catch (error: unknown) {
+    if (isRequestError(error) && error.status === 422) {
       // Repository already exists
       console.log(`! Repository already exists, fetching existing repo...`);
       const { data } = await octokit.repos.get({
@@ -98,9 +103,9 @@ export async function createOrUpdateFile(
       console.log(`✓ Updated ${path}`);
       return data.commit.sha!;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // File doesn't exist (404), create it
-    if (error.status === 404) {
+    if (isRequestError(error) && error.status === 404) {
       const { data } = await octokit.repos.createOrUpdateFileContents({
         owner,
         repo,
@@ -161,12 +166,14 @@ export async function enableGitHubPages(
       },
     });
     console.log('✓ GitHub Pages enabled');
-  } catch (error: any) {
-    if (error.status === 409) {
+  } catch (error: unknown) {
+    if (isRequestError(error) && error.status === 409) {
       console.log('! GitHub Pages already enabled');
     } else {
       console.warn(
-        `✗ Warning: Could not enable Pages (status ${error.status}): ${error.message}`
+        isRequestError(error)
+          ? `✗ Warning: Could not enable Pages (status ${error.status}): ${error.message}`
+          : '✗ Warning: Could not enable Pages due to an unknown error'
       );
     }
   }
